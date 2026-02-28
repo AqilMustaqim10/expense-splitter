@@ -1,29 +1,24 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-
-// ─── Context ───────────────────────────────────────────────────────────────────
 import { AuthProvider } from "./context/AuthContext";
-
-// ─── Route Guard ───────────────────────────────────────────────────────────────
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // ─── Pages ─────────────────────────────────────────────────────────────────────
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Groups from "./pages/Groups";
+import GroupDetail from "./pages/GroupDetail";
 
 const App = () => {
   return (
-    // ─── Wrap entire app with AuthProvider ────────────────────────────────────
-    // This gives every page access to user, login, logout, register
     <AuthProvider>
       <BrowserRouter>
-        {/* ─── Toast Notifications ──────────────────────────────────────────── */}
         <Toaster
           position="top-right"
           toastOptions={{
             style: {
-              background: "#1a1a26", // Match our dark theme
+              background: "#1a1a26",
               color: "#ffffff",
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: "12px",
@@ -31,14 +26,12 @@ const App = () => {
             },
           }}
         />
-
-        {/* ─── App Routes ───────────────────────────────────────────────────── */}
         <Routes>
-          {/* Public routes — accessible without login */}
+          {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* Protected route — redirects to /login if not authenticated */}
+          {/* Protected routes */}
           <Route
             path="/dashboard"
             element={
@@ -47,8 +40,24 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/groups"
+            element={
+              <ProtectedRoute>
+                <Groups />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/groups/:id"
+            element={
+              <ProtectedRoute>
+                <GroupDetail />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Default redirect — send users to dashboard */}
+          {/* Default redirect */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>

@@ -5,7 +5,8 @@ const cors = require("cors");
 require("dotenv").config();
 
 // ─── Route Imports ─────────────────────────────────────────────────────────────
-const authRoutes = require("./routes/authRoutes"); // Authentication routes
+const authRoutes = require("./routes/authRoutes");
+const groupRoutes = require("./routes/groupRoutes"); // Group routes
 
 const app = express();
 
@@ -14,7 +15,8 @@ app.use(cors());
 app.use(express.json());
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
-app.use("/api/auth", authRoutes); // All auth routes prefixed with /api/auth
+app.use("/api/auth", authRoutes);
+app.use("/api/groups", groupRoutes); // Mount group routes
 
 // ─── Health Check Route ────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
