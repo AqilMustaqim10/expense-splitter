@@ -1,23 +1,27 @@
 // ─── Core Imports ─────────────────────────────────────────────────────────────
-const express = require("express"); // Web framework for building our API
-const mongoose = require("mongoose"); // ODM for interacting with MongoDB
-const cors = require("cors"); // Allows frontend to communicate with backend
-require("dotenv").config(); // Loads variables from .env file
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+require("dotenv").config();
+
+// ─── Route Imports ─────────────────────────────────────────────────────────────
+const authRoutes = require("./routes/authRoutes"); // Authentication routes
 
 const app = express();
 
 // ─── Global Middleware ─────────────────────────────────────────────────────────
-app.use(cors()); // Enable Cross-Origin Resource Sharing
-app.use(express.json()); // Parse incoming JSON request bodies
+app.use(cors());
+app.use(express.json());
+
+// ─── API Routes ────────────────────────────────────────────────────────────────
+app.use("/api/auth", authRoutes); // All auth routes prefixed with /api/auth
 
 // ─── Health Check Route ────────────────────────────────────────────────────────
-// Simple route to confirm the API is running
 app.get("/", (req, res) => {
   res.json({ message: "Expense Splitter API is running!" });
 });
 
 // ─── Database Connection + Server Start ───────────────────────────────────────
-// Connect to MongoDB Atlas first, then start listening for requests
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
@@ -27,6 +31,5 @@ mongoose
     });
   })
   .catch((err) => {
-    // If connection fails, log the error and exit
     console.error("❌ MongoDB connection failed:", err.message);
   });
