@@ -6,7 +6,8 @@ require("dotenv").config();
 
 // ─── Route Imports ─────────────────────────────────────────────────────────────
 const authRoutes = require("./routes/authRoutes");
-const groupRoutes = require("./routes/groupRoutes"); // Group routes
+const groupRoutes = require("./routes/groupRoutes");
+const expenseRoutes = require("./routes/expenseRoutes");
 
 const app = express();
 
@@ -16,9 +17,13 @@ app.use(express.json());
 
 // ─── API Routes ────────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
-app.use("/api/groups", groupRoutes); // Mount group routes
+app.use("/api/groups", groupRoutes);
 
-// ─── Health Check Route ────────────────────────────────────────────────────────
+// ─── Nested Route: /api/groups/:groupId/expenses ───────────────────────────────
+// Expenses are always nested under a group
+app.use("/api/groups/:groupId/expenses", expenseRoutes);
+
+// ─── Health Check ──────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.json({ message: "Expense Splitter API is running!" });
 });
