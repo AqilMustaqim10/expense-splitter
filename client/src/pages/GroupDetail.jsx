@@ -27,6 +27,8 @@ import Navbar from "../components/Navbar";
 import toast from "react-hot-toast";
 import { fetchSettlements } from "../api/expenses";
 import { ArrowRight } from "lucide-react";
+import usePageTitle from "../hooks/usePageTitle";
+// page title will be set inside the component once `group` is available
 
 // ─── Group Detail Page ─────────────────────────────────────────────────────────
 // Shows group info, members, expenses list, and balances
@@ -37,6 +39,8 @@ const GroupDetail = () => {
 
   // ─── State ───────────────────────────────────────────────────────────────────
   const [group, setGroup] = useState(null);
+  // set page title based on loaded group name
+  usePageTitle(group?.name || "Group");
   const [expenses, setExpenses] = useState([]);
   const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);

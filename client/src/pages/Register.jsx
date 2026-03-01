@@ -4,8 +4,10 @@ import { motion } from "framer-motion";
 import { Mail, Lock, User, UserPlus, AlertCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
+import usePageTitle from "../hooks/usePageTitle";
 
 const Register = () => {
+  usePageTitle("Create Account");
   const navigate = useNavigate();
   const { register } = useAuth();
 

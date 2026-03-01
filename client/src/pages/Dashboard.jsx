@@ -14,10 +14,13 @@ import { fetchBalances, fetchExpenses } from "../api/expenses";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import toast from "react-hot-toast";
+import usePageTitle from "../hooks/usePageTitle";
+// page title will be set inside the component
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
 // Overview of all groups, total spending, and personal balances
 const Dashboard = () => {
+  usePageTitle("Dashboard");
   const { user } = useAuth();
   const navigate = useNavigate();
 

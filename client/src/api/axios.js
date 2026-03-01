@@ -1,18 +1,17 @@
 import axios from "axios";
 
 // ─── Axios Instance ────────────────────────────────────────────────────────────
-// Create a reusable axios instance pointing to our backend API
+// Uses environment variable so we can switch between dev and production
 const API = axios.create({
-  baseURL: "http://localhost:5000/api", // All requests will be prefixed with this
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
 });
 
 // ─── Request Interceptor ───────────────────────────────────────────────────────
-// Runs before every request — automatically attaches the JWT token if it exists
-// This means the user stays "logged in" across page refreshes
+// Automatically attaches JWT token to every request if it exists
 API.interceptors.request.use((req) => {
-  const token = localStorage.getItem("token"); // Get saved token from browser
+  const token = localStorage.getItem("token");
   if (token) {
-    req.headers.Authorization = `Bearer ${token}`; // Attach token to request header
+    req.headers.Authorization = `Bearer ${token}`;
   }
   return req;
 });

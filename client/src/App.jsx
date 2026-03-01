@@ -1,19 +1,30 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // ─── Pages ─────────────────────────────────────────────────────────────────────
+import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Groups from "./pages/Groups";
 import GroupDetail from "./pages/GroupDetail";
+import NotFound from "./pages/NotFound";
+
+// ─── Smart Home Route ──────────────────────────────────────────────────────────
+// Redirects logged-in users to dashboard, guests to landing page
+const HomeRoute = () => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  return user ? <Navigate to="/dashboard" replace /> : <Landing />;
+};
 
 const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
+        {/* ─── Toast Notifications ──────────────────────────────────────────────── */}
         <Toaster
           position="top-right"
           toastOptions={{
@@ -24,9 +35,19 @@ const App = () => {
               borderRadius: "12px",
               fontSize: "14px",
             },
+            success: {
+              iconTheme: { primary: "#4ade80", secondary: "#1a1a26" },
+            },
+            error: {
+              iconTheme: { primary: "#f87171", secondary: "#1a1a26" },
+            },
           }}
         />
+
         <Routes>
+          {/* Smart home — landing or dashboard based on auth */}
+          <Route path="/" element={<HomeRoute />} />
+
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -56,9 +77,10 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<NotFound />} />
 
-          {/* Default redirect */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Catch all — redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

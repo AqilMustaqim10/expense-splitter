@@ -5,11 +5,14 @@ import { Plus, Users, Trash2, ArrowRight, X, Loader } from "lucide-react";
 import { fetchGroups, createGroup, deleteGroup } from "../api/groups";
 import Navbar from "../components/Navbar";
 import toast from "react-hot-toast";
+import usePageTitle from "../hooks/usePageTitle";
+// page title will be set inside the component
 
 // ─── Groups Page ───────────────────────────────────────────────────────────────
 // Shows all groups the user belongs to
 // Allows creating and deleting groups
 const Groups = () => {
+  usePageTitle("Groups");
   const navigate = useNavigate();
 
   // ─── State ───────────────────────────────────────────────────────────────────
