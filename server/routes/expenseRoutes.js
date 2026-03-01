@@ -1,20 +1,21 @@
 const express = require("express");
-const router = express.Router({ mergeParams: true }); // mergeParams lets us access groupId from parent route
+const router = express.Router({ mergeParams: true });
 const { protect } = require("../middleware/authMiddleware");
 const {
   addExpense,
   getExpenses,
   deleteExpense,
   getBalances,
+  getSettlements, // Add this
 } = require("../controllers/expenseController");
 
 // ─── Expense Routes ────────────────────────────────────────────────────────────
-// All routes require authentication
 router.use(protect);
 
-router.post("/", addExpense); // Add expense to group
-router.get("/", getExpenses); // Get all expenses in group
-router.delete("/:expenseId", deleteExpense); // Delete an expense
-router.get("/balances", getBalances); // Get balances for group
+router.post("/", addExpense);
+router.get("/", getExpenses);
+router.delete("/:expenseId", deleteExpense);
+router.get("/balances", getBalances);
+router.get("/settlements", getSettlements); // New settlement route
 
 module.exports = router;

@@ -25,6 +25,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import toast from "react-hot-toast";
+import { fetchSettlements } from "../api/expenses";
+import { ArrowRight } from "lucide-react";
 
 // ─── Group Detail Page ─────────────────────────────────────────────────────────
 // Shows group info, members, expenses list, and balances
@@ -59,6 +61,9 @@ const GroupDetail = () => {
   const [memberEmail, setMemberEmail] = useState("");
   const [addingMember, setAddingMember] = useState(false);
 
+  // Settlements state
+  const [settlements, setSettlements] = useState([]);
+
   // ─── Load All Data ────────────────────────────────────────────────────────────
   useEffect(() => {
     loadAll();
@@ -66,16 +71,18 @@ const GroupDetail = () => {
 
   const loadAll = async () => {
     try {
-      const [groupRes, expenseRes, balanceRes] = await Promise.all([
-        fetchGroup(id),
-        fetchExpenses(id),
-        fetchBalances(id),
-      ]);
+      const [groupRes, expenseRes, balanceRes, settlementRes] =
+        await Promise.all([
+          fetchGroup(id),
+          fetchExpenses(id),
+          fetchBalances(id),
+          fetchSettlements(id), // Add this
+        ]);
       setGroup(groupRes.data);
       setExpenses(expenseRes.data);
       setBalances(balanceRes.data);
+      setSettlements(settlementRes.data); // Add this
 
-      // Pre-select all members as participants when form opens
       setExpenseForm((prev) => ({
         ...prev,
         paidBy: user._id,
@@ -95,11 +102,15 @@ const GroupDetail = () => {
     setSubmitting(true);
     try {
       const res = await addExpense(id, expenseForm);
-      setExpenses([res.data, ...expenses]); // Add to top of list
+      setExpenses([res.data, ...expenses]);
 
-      // Refresh balances after adding expense
-      const balanceRes = await fetchBalances(id);
+      // Refresh balances AND settlements
+      const [balanceRes, settlementRes] = await Promise.all([
+        fetchBalances(id),
+        fetchSettlements(id),
+      ]);
       setBalances(balanceRes.data);
+      setSettlements(settlementRes.data);
 
       setShowAddExpense(false);
       resetExpenseForm();
@@ -118,9 +129,13 @@ const GroupDetail = () => {
       await deleteExpense(id, expenseId);
       setExpenses(expenses.filter((e) => e._id !== expenseId));
 
-      // Refresh balances after deleting expense
-      const balanceRes = await fetchBalances(id);
+      // Refresh balances AND settlements
+      const [balanceRes, settlementRes] = await Promise.all([
+        fetchBalances(id),
+        fetchSettlements(id),
+      ]);
       setBalances(balanceRes.data);
+      setSettlements(settlementRes.data);
 
       toast.success("Expense deleted");
     } catch (error) {
@@ -272,7 +287,7 @@ const GroupDetail = () => {
           transition={{ delay: 0.1 }}
           className="flex gap-2 mb-6 bg-dark-800 border border-white/10 rounded-xl p-1"
         >
-          {["expenses", "balances", "members"].map((tab) => (
+          {["expenses", "balances", "settlements", "members"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -445,6 +460,104 @@ const GroupDetail = () => {
                   </div>
                 </motion.div>
               ))}
+            </motion.div>
+          )}
+
+          {/* ─── Settlements Tab ─────────────────────────────────────────────────────── */}
+          {activeTab === "settlements" && (
+            <motion.div
+              key="settlements"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              {settlements.length === 0 ? (
+                // All settled state
+                <div className="text-center py-16">
+                  <div className="w-14 h-14 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <TrendingUp size={24} className="text-green-400" />
+                  </div>
+                  <h3 className="text-white font-display font-bold text-lg mb-2">
+                    All settled up! 🎉
+                  </h3>
+                  <p className="text-white/40 text-sm">
+                    No outstanding debts in this group
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Info banner */}
+                  <div className="bg-primary-500/10 border border-primary-500/20 rounded-xl px-4 py-3 mb-4">
+                    <p className="text-primary-400 text-sm">
+                      💡 {settlements.length} transaction
+                      {settlements.length !== 1 ? "s" : ""} needed to settle all
+                      debts
+                    </p>
+                  </div>
+
+                  {settlements.map((settlement, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="bg-dark-800 border border-white/10 rounded-2xl p-5"
+                    >
+                      <div className="flex items-center justify-between">
+                        {/* From (debtor) */}
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center">
+                            <span className="text-red-400 text-sm font-bold">
+                              {settlement.from.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-white font-medium text-sm">
+                              {settlement.from.name}
+                              {settlement.from._id === user._id && (
+                                <span className="text-white/30 ml-1">
+                                  (you)
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-red-400 text-xs">owes</p>
+                          </div>
+                        </div>
+
+                        {/* Arrow + Amount */}
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-white font-bold">
+                            {formatCurrency(settlement.amount)}
+                          </span>
+                          <ArrowRight size={16} className="text-white/30" />
+                        </div>
+
+                        {/* To (creditor) */}
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <p className="text-white font-medium text-sm text-right">
+                              {settlement.to.name}
+                              {settlement.to._id === user._id && (
+                                <span className="text-white/30 ml-1">
+                                  (you)
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-green-400 text-xs text-right">
+                              receives
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center">
+                            <span className="text-green-400 text-sm font-bold">
+                              {settlement.to.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 

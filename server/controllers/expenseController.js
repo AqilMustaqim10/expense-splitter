@@ -188,4 +188,110 @@ const getBalances = async (req, res) => {
   }
 };
 
-module.exports = { addExpense, getExpenses, deleteExpense, getBalances };
+// ─── Get Settlement Suggestions ────────────────────────────────────────────────
+// GET /api/groups/:groupId/expenses/settlements
+// Uses an optimized algorithm to suggest the MINIMUM number of
+// transactions needed to settle all debts in the group
+const getSettlements = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    const group = await Group.findById(groupId).populate(
+      "members",
+      "name email",
+    );
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    // Get all expenses for this group
+    const expenses = await Expense.find({ group: groupId })
+      .populate("paidBy", "name email")
+      .populate("splits.user", "name email");
+
+    // ─── Step 1: Calculate net balance per member ──────────────────────────────
+    const balanceMap = {};
+
+    group.members.forEach((member) => {
+      balanceMap[member._id.toString()] = {
+        user: member,
+        net: 0,
+      };
+    });
+
+    expenses.forEach((expense) => {
+      const payerId = expense.paidBy._id.toString();
+
+      // Payer gets credit for the full amount
+      if (balanceMap[payerId]) {
+        balanceMap[payerId].net += expense.amount;
+      }
+
+      // Each participant owes their share
+      expense.splits.forEach((split) => {
+        const userId = split.user._id.toString();
+        if (balanceMap[userId]) {
+          balanceMap[userId].net -= split.amount;
+        }
+      });
+    });
+
+    // ─── Step 2: Separate into creditors and debtors ───────────────────────────
+    // creditors = people who are owed money (net > 0)
+    // debtors   = people who owe money (net < 0)
+    let creditors = [];
+    let debtors = [];
+
+    Object.values(balanceMap).forEach(({ user, net }) => {
+      const rounded = parseFloat(net.toFixed(2));
+      if (rounded > 0) creditors.push({ user, amount: rounded });
+      if (rounded < 0) debtors.push({ user, amount: Math.abs(rounded) });
+    });
+
+    // ─── Step 3: Greedy settlement algorithm ───────────────────────────────────
+    // Match the largest debtor with the largest creditor
+    // This produces the minimum number of transactions
+    const settlements = [];
+
+    while (debtors.length > 0 && creditors.length > 0) {
+      // Sort so largest amounts are first
+      debtors.sort((a, b) => b.amount - a.amount);
+      creditors.sort((a, b) => b.amount - a.amount);
+
+      const debtor = debtors[0];
+      const creditor = creditors[0];
+
+      // The settlement amount is the smaller of the two
+      const settleAmount = parseFloat(
+        Math.min(debtor.amount, creditor.amount).toFixed(2),
+      );
+
+      // Record this transaction
+      settlements.push({
+        from: debtor.user, // Who pays
+        to: creditor.user, // Who receives
+        amount: settleAmount,
+      });
+
+      // Reduce both balances by the settled amount
+      debtor.amount = parseFloat((debtor.amount - settleAmount).toFixed(2));
+      creditor.amount = parseFloat((creditor.amount - settleAmount).toFixed(2));
+
+      // Remove fully settled parties from the list
+      if (debtor.amount < 0.01) debtors.shift();
+      if (creditor.amount < 0.01) creditors.shift();
+    }
+
+    res.json(settlements);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+module.exports = {
+  addExpense,
+  getExpenses,
+  deleteExpense,
+  getBalances,
+  getSettlements,
+};

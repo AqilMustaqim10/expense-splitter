@@ -11,3 +11,5 @@ export const deleteExpense = (groupId, expenseId) =>
   API.delete(`/groups/${groupId}/expenses/${expenseId}`);
 export const fetchBalances = (groupId) =>
   API.get(`/groups/${groupId}/expenses/balances`);
+export const fetchSettlements = (groupId) =>
+  API.get(`/groups/${groupId}/expenses/settlements`); // New
