@@ -8,6 +8,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const groupRoutes = require("./routes/groupRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
+const settlementRoutes = require("./routes/settlementRoutes"); // New
 
 const app = express();
 
@@ -18,10 +19,8 @@ app.use(express.json());
 // ─── API Routes ────────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/groups", groupRoutes);
-
-// ─── Nested Route: /api/groups/:groupId/expenses ───────────────────────────────
-// Expenses are always nested under a group
 app.use("/api/groups/:groupId/expenses", expenseRoutes);
+app.use("/api/groups/:groupId/settlements", settlementRoutes); // New
 
 // ─── Health Check ──────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {

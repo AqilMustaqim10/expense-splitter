@@ -14,6 +14,11 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  ArrowRight,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Ban,
 } from "lucide-react";
 import { fetchGroup, addMember, removeMember } from "../api/groups";
 import {
@@ -22,12 +27,17 @@ import {
   deleteExpense,
   fetchBalances,
 } from "../api/expenses";
+import {
+  fetchSettlements,
+  markAsPaid,
+  confirmPayment,
+  cancelSettlement,
+} from "../api/settlements";
 import { useAuth } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
-import toast from "react-hot-toast";
-import { fetchSettlements } from "../api/expenses";
-import { ArrowRight } from "lucide-react";
+import StatusBadge from "../components/StatusBadge";
 import usePageTitle from "../hooks/usePageTitle";
+import toast from "react-hot-toast";
 // page title will be set inside the component once `group` is available
 
 // ─── Group Detail Page ─────────────────────────────────────────────────────────
@@ -39,12 +49,17 @@ const GroupDetail = () => {
 
   // ─── State ───────────────────────────────────────────────────────────────────
   const [group, setGroup] = useState(null);
-  // set page title based on loaded group name
-  usePageTitle(group?.name || "Group");
   const [expenses, setExpenses] = useState([]);
   const [balances, setBalances] = useState([]);
+  const [settlements, setSettlements] = useState({
+    suggestions: [],
+    history: [],
+  });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("expenses"); // expenses | members | balances
+  const [activeTab, setActiveTab] = useState("expenses");
+
+  // Action loading states — track which button is currently loading
+  const [actionLoading, setActionLoading] = useState({});
 
   // Modal states
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -65,9 +80,6 @@ const GroupDetail = () => {
   const [memberEmail, setMemberEmail] = useState("");
   const [addingMember, setAddingMember] = useState(false);
 
-  // Settlements state
-  const [settlements, setSettlements] = useState([]);
-
   // ─── Load All Data ────────────────────────────────────────────────────────────
   useEffect(() => {
     loadAll();
@@ -80,12 +92,12 @@ const GroupDetail = () => {
           fetchGroup(id),
           fetchExpenses(id),
           fetchBalances(id),
-          fetchSettlements(id), // Add this
+          fetchSettlements(id),
         ]);
       setGroup(groupRes.data);
       setExpenses(expenseRes.data);
       setBalances(balanceRes.data);
-      setSettlements(settlementRes.data); // Add this
+      setSettlements(settlementRes.data); // { suggestions: [], history: [] }
 
       setExpenseForm((prev) => ({
         ...prev,
@@ -100,6 +112,17 @@ const GroupDetail = () => {
     }
   };
 
+  // ─── Refresh Settlements + Balances ───────────────────────────────────────────
+  // Called after any action that changes money state
+  const refreshFinancials = async () => {
+    const [balanceRes, settlementRes] = await Promise.all([
+      fetchBalances(id),
+      fetchSettlements(id),
+    ]);
+    setBalances(balanceRes.data);
+    setSettlements(settlementRes.data);
+  };
+
   // ─── Handle Add Expense ───────────────────────────────────────────────────────
   const handleAddExpense = async (e) => {
     e.preventDefault();
@@ -107,15 +130,7 @@ const GroupDetail = () => {
     try {
       const res = await addExpense(id, expenseForm);
       setExpenses([res.data, ...expenses]);
-
-      // Refresh balances AND settlements
-      const [balanceRes, settlementRes] = await Promise.all([
-        fetchBalances(id),
-        fetchSettlements(id),
-      ]);
-      setBalances(balanceRes.data);
-      setSettlements(settlementRes.data);
-
+      await refreshFinancials(); // Refresh balances + settlements
       setShowAddExpense(false);
       resetExpenseForm();
       toast.success("Expense added! 💸");
@@ -132,18 +147,59 @@ const GroupDetail = () => {
     try {
       await deleteExpense(id, expenseId);
       setExpenses(expenses.filter((e) => e._id !== expenseId));
-
-      // Refresh balances AND settlements
-      const [balanceRes, settlementRes] = await Promise.all([
-        fetchBalances(id),
-        fetchSettlements(id),
-      ]);
-      setBalances(balanceRes.data);
-      setSettlements(settlementRes.data);
-
+      await refreshFinancials(); // Refresh balances + settlements
       toast.success("Expense deleted");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to delete expense");
+    }
+  };
+
+  // ─── Handle Mark As Paid ──────────────────────────────────────────────────────
+  // Debtor clicks this to notify the creditor they have paid
+  const handleMarkAsPaid = async (toUserId, amount) => {
+    const key = `pay-${toUserId}`;
+    setActionLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      await markAsPaid(id, { toUserId, amount });
+      await refreshFinancials();
+      toast.success("Payment marked! Waiting for confirmation 🕐");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to mark as paid");
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  // ─── Handle Confirm Payment ───────────────────────────────────────────────────
+  // Creditor clicks this to confirm they received the money
+  const handleConfirmPayment = async (settlementId) => {
+    const key = `confirm-${settlementId}`;
+    setActionLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      await confirmPayment(id, settlementId);
+      await refreshFinancials();
+      toast.success("Payment confirmed! Debt settled ✅");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to confirm payment");
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  // ─── Handle Cancel Settlement ─────────────────────────────────────────────────
+  // Either debtor or creditor can cancel a pending settlement
+  const handleCancelSettlement = async (settlementId) => {
+    if (!window.confirm("Cancel this settlement?")) return;
+    const key = `cancel-${settlementId}`;
+    setActionLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      await cancelSettlement(id, settlementId);
+      await refreshFinancials();
+      toast.success("Settlement cancelled");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to cancel");
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [key]: false }));
     }
   };
 
@@ -474,92 +530,299 @@ const GroupDetail = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
             >
-              {settlements.length === 0 ? (
-                // All settled state
-                <div className="text-center py-16">
-                  <div className="w-14 h-14 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <TrendingUp size={24} className="text-green-400" />
-                  </div>
-                  <h3 className="text-white font-display font-bold text-lg mb-2">
-                    All settled up! 🎉
-                  </h3>
-                  <p className="text-white/40 text-sm">
-                    No outstanding debts in this group
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* Info banner */}
-                  <div className="bg-primary-500/10 border border-primary-500/20 rounded-xl px-4 py-3 mb-4">
-                    <p className="text-primary-400 text-sm">
-                      💡 {settlements.length} transaction
-                      {settlements.length !== 1 ? "s" : ""} needed to settle all
-                      debts
+              {/* ── Suggested Transactions ─────────────────────────────────────────────── */}
+              <div>
+                <h3 className="text-white font-display font-bold text-lg mb-3">
+                  Outstanding Debts
+                </h3>
+
+                {settlements.suggestions.length === 0 ? (
+                  // All clear state
+                  <div className="text-center py-12 bg-dark-800 border border-white/10 rounded-2xl">
+                    <div className="w-14 h-14 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle size={24} className="text-green-400" />
+                    </div>
+                    <h3 className="text-white font-display font-bold text-lg mb-2">
+                      All settled up! 🎉
+                    </h3>
+                    <p className="text-white/40 text-sm">
+                      No outstanding debts in this group
                     </p>
                   </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Info banner */}
+                    <div className="bg-primary-500/10 border border-primary-500/20 rounded-xl px-4 py-3">
+                      <p className="text-primary-400 text-sm">
+                        💡 {settlements.suggestions.length} transaction
+                        {settlements.suggestions.length !== 1 ? "s" : ""} needed
+                        to settle all debts
+                      </p>
+                    </div>
 
-                  {settlements.map((settlement, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="bg-dark-800 border border-white/10 rounded-2xl p-5"
-                    >
-                      <div className="flex items-center justify-between">
-                        {/* From (debtor) */}
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center">
-                            <span className="text-red-400 text-sm font-bold">
-                              {settlement.from.name.charAt(0).toUpperCase()}
+                    {settlements.suggestions.map((suggestion, index) => {
+                      // Check if this suggestion already has a pending settlement
+                      const alreadyPending = settlements.history.some(
+                        (h) =>
+                          h.status === "pending" &&
+                          h.from._id === suggestion.from._id &&
+                          h.to._id === suggestion.to._id,
+                      );
+
+                      const isDebtor = suggestion.from._id === user._id;
+                      const isCreditor = suggestion.to._id === user._id;
+                      const payKey = `pay-${suggestion.to._id}`;
+
+                      return (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="bg-dark-800 border border-white/10 rounded-2xl p-5"
+                        >
+                          {/* Transaction row */}
+                          <div className="flex items-center justify-between mb-4">
+                            {/* From (debtor) */}
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center">
+                                <span className="text-red-400 text-sm font-bold">
+                                  {suggestion.from.name.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-white font-medium text-sm">
+                                  {suggestion.from.name}
+                                  {isDebtor && (
+                                    <span className="text-white/30 ml-1">
+                                      (you)
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-red-400 text-xs">owes</p>
+                              </div>
+                            </div>
+
+                            {/* Amount + Arrow */}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-white font-bold">
+                                {formatCurrency(suggestion.amount)}
+                              </span>
+                              <ArrowRight size={14} className="text-white/30" />
+                            </div>
+
+                            {/* To (creditor) */}
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <p className="text-white font-medium text-sm">
+                                  {suggestion.to.name}
+                                  {isCreditor && (
+                                    <span className="text-white/30 ml-1">
+                                      (you)
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-green-400 text-xs">
+                                  receives
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center">
+                                <span className="text-green-400 text-sm font-bold">
+                                  {suggestion.to.name.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ── Action Button — only shown to the debtor ────────────────── */}
+                          {isDebtor && (
+                            <div className="mt-3 pt-3 border-t border-white/5">
+                              {alreadyPending ? (
+                                // Already marked — show waiting state
+                                <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                                  <Clock size={14} />
+                                  Waiting for {suggestion.to.name} to confirm...
+                                </div>
+                              ) : (
+                                <motion.button
+                                  onClick={() =>
+                                    handleMarkAsPaid(
+                                      suggestion.to._id,
+                                      suggestion.amount,
+                                    )
+                                  }
+                                  disabled={actionLoading[payKey]}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  className="w-full flex items-center justify-center gap-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 font-medium py-2.5 rounded-xl transition-all text-sm"
+                                >
+                                  {actionLoading[payKey] ? (
+                                    <Loader
+                                      size={14}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <>
+                                      <CheckCircle size={14} />
+                                      Mark as Paid
+                                    </>
+                                  )}
+                                </motion.button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ── Creditor sees waiting notice ────────────────────────────── */}
+                          {isCreditor && alreadyPending && (
+                            <div className="mt-3 pt-3 border-t border-white/5">
+                              <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                                <Clock size={14} />
+                                {suggestion.from.name} says they've paid —
+                                confirm below
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Settlement History ──────────────────────────────────────────────────── */}
+              {settlements.history.length > 0 && (
+                <div>
+                  <h3 className="text-white font-display font-bold text-lg mb-3">
+                    Settlement History
+                  </h3>
+                  <div className="space-y-3">
+                    {settlements.history.map((record, index) => {
+                      const isDebtor = record.from._id === user._id;
+                      const isCreditor = record.to._id === user._id;
+                      const confirmKey = `confirm-${record._id}`;
+                      const cancelKey = `cancel-${record._id}`;
+
+                      return (
+                        <motion.div
+                          key={record._id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.04 }}
+                          className={`bg-dark-800 border rounded-2xl p-5 ${
+                            record.status === "confirmed"
+                              ? "border-green-500/20"
+                              : record.status === "cancelled"
+                                ? "border-white/5 opacity-60"
+                                : "border-yellow-500/20"
+                          }`}
+                        >
+                          {/* History record header */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              {/* From avatar */}
+                              <div className="w-8 h-8 rounded-full bg-dark-700 border border-white/10 flex items-center justify-center">
+                                <span className="text-white/60 text-xs font-bold">
+                                  {record.from.name.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+
+                              <div className="text-sm">
+                                <span className="text-white font-medium">
+                                  {isDebtor ? "You" : record.from.name}
+                                </span>
+                                <span className="text-white/40"> → </span>
+                                <span className="text-white font-medium">
+                                  {isCreditor ? "You" : record.to.name}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Amount */}
+                            <span className="text-white font-bold text-sm">
+                              {formatCurrency(record.amount)}
                             </span>
                           </div>
-                          <div>
-                            <p className="text-white font-medium text-sm">
-                              {settlement.from.name}
-                              {settlement.from._id === user._id && (
-                                <span className="text-white/30 ml-1">
-                                  (you)
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-red-400 text-xs">owes</p>
-                          </div>
-                        </div>
 
-                        {/* Arrow + Amount */}
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-white font-bold">
-                            {formatCurrency(settlement.amount)}
-                          </span>
-                          <ArrowRight size={16} className="text-white/30" />
-                        </div>
+                          {/* Status badge */}
+                          <div className="flex items-center justify-between">
+                            <StatusBadge status={record.status} />
 
-                        {/* To (creditor) */}
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <p className="text-white font-medium text-sm text-right">
-                              {settlement.to.name}
-                              {settlement.to._id === user._id && (
-                                <span className="text-white/30 ml-1">
-                                  (you)
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-green-400 text-xs text-right">
-                              receives
-                            </p>
+                            {/* Action buttons — only for pending settlements */}
+                            {record.status === "pending" && (
+                              <div className="flex items-center gap-2">
+                                {/* Creditor can confirm they received money */}
+                                {isCreditor && (
+                                  <motion.button
+                                    onClick={() =>
+                                      handleConfirmPayment(record._id)
+                                    }
+                                    disabled={actionLoading[confirmKey]}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="flex items-center gap-1.5 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
+                                  >
+                                    {actionLoading[confirmKey] ? (
+                                      <Loader
+                                        size={12}
+                                        className="animate-spin"
+                                      />
+                                    ) : (
+                                      <>
+                                        <CheckCircle size={12} />
+                                        Confirm Received
+                                      </>
+                                    )}
+                                  </motion.button>
+                                )}
+
+                                {/* Both debtor and creditor can cancel */}
+                                {(isDebtor || isCreditor) && (
+                                  <motion.button
+                                    onClick={() =>
+                                      handleCancelSettlement(record._id)
+                                    }
+                                    disabled={actionLoading[cancelKey]}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
+                                  >
+                                    {actionLoading[cancelKey] ? (
+                                      <Loader
+                                        size={12}
+                                        className="animate-spin"
+                                      />
+                                    ) : (
+                                      <>
+                                        <XCircle size={12} />
+                                        Cancel
+                                      </>
+                                    )}
+                                  </motion.button>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <div className="w-10 h-10 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center">
-                            <span className="text-green-400 text-sm font-bold">
-                              {settlement.to.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
+
+                          {/* Confirmed timestamp */}
+                          {record.status === "confirmed" &&
+                            record.confirmedAt && (
+                              <p className="text-white/20 text-xs mt-2">
+                                Confirmed on{" "}
+                                {new Date(
+                                  record.confirmedAt,
+                                ).toLocaleDateString("en-MY", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </p>
+                            )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </motion.div>
